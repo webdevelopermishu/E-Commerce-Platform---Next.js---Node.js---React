@@ -1,0 +1,20 @@
+# Alternative to PM2: systemd unit.  sudo cp deploy/mango-shop.service /etc/systemd/system/
+# sudo systemctl daemon-reload && sudo systemctl enable --now mango-shop
+[Unit]
+Description=Mango shop (Next.js + Payload)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=mango
+WorkingDirectory=/srv/mango-shop/current
+ExecStart=/usr/bin/node scripts/start.mjs
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+NoNewPrivileges=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/mango-shop
+
+[Install]
+WantedBy=multi-user.target

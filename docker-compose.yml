@@ -1,0 +1,54 @@
+# Production-style stack: PostgreSQL + the app. Put Nginx/Caddy (with HTTPS) in front — see docs/DEPLOYMENT.md.
+#   cp .env.example .env   # fill in PAYLOAD_SECRET, NEXT_PUBLIC_SERVER_URL, POSTGRES_PASSWORD ...
+#   docker compose up -d --build
+#   docker compose run --rm tools npm run create-admin -- --email you@example.com
+#   docker compose run --rm tools npm run seed          # optional sample catalogue
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mango_shop}
+      POSTGRES_USER: ${POSTGRES_USER:-mango}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build: { context: ., target: runner }
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-mango}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-mango_shop}
+      MEDIA_DIR: /data/media
+      HOSTNAME: 0.0.0.0
+      RUN_MIGRATIONS_ON_START: "true"
+    depends_on:
+      db: { condition: service_healthy }
+    ports:
+      # Bound to localhost only: the reverse proxy on the host terminates HTTPS and forwards here.
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - media:/data/media
+
+  # One-off commands (migrate, seed, create-admin). Not started by `up`.
+  tools:
+    build: { context: ., target: tools }
+    profiles: ["tools"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-mango}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-mango_shop}
+      MEDIA_DIR: /data/media
+    depends_on:
+      db: { condition: service_healthy }
+    volumes:
+      - media:/data/media
+
+volumes:
+  pgdata:
+  media:
